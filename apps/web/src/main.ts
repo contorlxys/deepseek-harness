@@ -1,6 +1,7 @@
 /** Browser entry for the Web client. */
 import '@deepseek-ai/dsh-client-ui-theme/brand-font.css'
 import { AppWebEntry, applyIndexInjections } from '@deepseek-ai/dsh-client-web'
+import { runSsoGate } from './sso/gate.ts'
 
 interface DesktopBootGlobal {
   dshDesktopBoot?: {
@@ -17,7 +18,6 @@ const reportFailure = (reason: unknown): void => {
 try {
   const el = document.getElementById('root')
   if (el === null) throw new Error('web app: missing #root')
-  const entry = new AppWebEntry(el)
   if (desktop !== undefined) {
     const gate = (globalThis as { __DSH_BOOT_READY__?: PromiseWithResolvers<void> }).__DSH_BOOT_READY__
     if (gate === undefined) throw new Error('desktop web: boot readiness is missing')
@@ -34,7 +34,17 @@ try {
       gate.resolve()
     }).catch((error: unknown) => { gate.reject(error) })
   }
-  void entry.run(desktop === undefined ? undefined : reportFailure)
+  // The single sign-on gate is disabled unless the deployment enables it; it
+  // owns the page until the authorization server returns a code, then the
+  // shell boots. A disabled gate resolves without a code, and the caller
+  // starts the shell. AppWebEntry is constructed inside startShell: its
+  // constructor draws the full-screen boot page, which must not cover the card.
+  const startShell = (): void => {
+    void new AppWebEntry(el).run(desktop === undefined ? undefined : reportFailure)
+  }
+  void runSsoGate({ container: el, onAuthorized: startShell })
+    .then((code) => { if (code === undefined) startShell() })
+    .catch((error: unknown) => { reportFailure(error) })
 } catch (reason) {
   reportFailure(reason)
 }

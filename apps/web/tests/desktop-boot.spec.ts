@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const boot = vi.hoisted(() => ({
   run: vi.fn(),
@@ -9,6 +9,12 @@ vi.mock('@deepseek-ai/dsh-client-web', () => ({
   AppWebEntry: class { run = boot.run },
   applyIndexInjections: boot.applyIndexInjections,
 }))
+
+beforeEach(() => {
+  // The single sign-on gate probes for a runtime configuration file before it
+  // starts the shell; this deployment ships none, and no socket may leave the suite.
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('dsh-sso.config.json: not served') }))
+})
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -27,6 +33,8 @@ it('forwards client initialization failures to native recovery', async () => {
   await import('../src/main.ts')
   await gate.promise
   expect(boot.applyIndexInjections).toHaveBeenCalledWith([], expect.any(Function))
+  // The shell starts once the single sign-on gate settles.
+  await vi.waitFor(() => { expect(boot.run).toHaveBeenCalled() })
   const report = boot.run.mock.calls[0]![0] as (reason: unknown) => void
   report(new Error('client plugin activation failed'))
   expect(failed).toHaveBeenCalledWith('client plugin activation failed')
@@ -42,14 +50,14 @@ it('rejects the shared boot wait when the Desktop Host cannot start', async () =
   await import('../src/main.ts')
   await rejected
   expect(boot.applyIndexInjections).not.toHaveBeenCalled()
-  expect(boot.run).toHaveBeenCalledWith(expect.any(Function))
+  await vi.waitFor(() => { expect(boot.run).toHaveBeenCalledWith(expect.any(Function)) })
 })
 
 it('leaves browser failure presentation with the Web boot kernel', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   vi.stubGlobal('dshDesktopBoot', undefined)
   await import('../src/main.ts')
-  expect(boot.run).toHaveBeenCalledWith(undefined)
+  await vi.waitFor(() => { expect(boot.run).toHaveBeenCalledWith(undefined) })
 })
 
 it.each(['root', 'readiness'])('reports missing %s before client plugin startup', async (missing) => {

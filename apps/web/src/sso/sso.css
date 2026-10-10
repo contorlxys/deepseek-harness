@@ -1,0 +1,53 @@
+.dsh-sso {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--dsh-color-bg-layout, #f5f7fa);
+}
+
+.dsh-sso__card {
+  box-sizing: border-box;
+  width: min(420px, calc(100vw - 48px));
+  padding: 32px;
+  border-radius: 8px;
+  background: var(--dsh-color-bg-container, #fff);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 8%);
+  text-align: center;
+}
+
+.dsh-sso__title {
+  margin: 0 0 12px;
+  color: var(--dsh-color-text, #1f2329);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.dsh-sso__status {
+  margin: 0;
+  color: var(--dsh-color-text-secondary, #646a73);
+  font-size: 14px;
+}
+
+.dsh-sso__detail {
+  margin: 12px 0 0;
+  color: var(--dsh-color-error, #d83931);
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.dsh-sso__retry {
+  margin-top: 20px;
+  padding: 6px 20px;
+  border: 1px solid var(--dsh-color-border, #dee0e3);
+  border-radius: 4px;
+  background: var(--dsh-color-bg-container, #fff);
+  color: var(--dsh-color-text, #1f2329);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dsh-sso__retry:hover {
+  border-color: var(--dsh-color-primary, #2b5bd7);
+  color: var(--dsh-color-primary, #2b5bd7);
+}
