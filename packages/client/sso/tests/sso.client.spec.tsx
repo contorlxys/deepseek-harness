@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { SsoNotice } from '../src/client/SsoNotice.tsx'
+import { SsoSection } from '../src/client/SsoSection.tsx'
 import { en, zh } from '../src/client/locales.ts'
 // Side-effect type import: the locale namespace this notice's props derive from.
 import type {} from '../src/client/index.ts'
@@ -74,5 +75,70 @@ describe('SsoNotice', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ authenticated: false }), { status: 200 })))
     await act(async () => { render(<SsoNotice t={translate(zh)} />) })
     await waitFor(() => { expect(screen.queryByText(zh.notice)).not.toBeNull() })
+  })
+})
+
+describe('SsoSection', () => {
+  /** The section reads no global slot source; any of those hooks reaching it is a bug. */
+  function unusedHook(): never {
+    throw new Error('This section does not read global slot sources')
+  }
+
+  /** Mount the section with the stubbed locale seat, the shell's close seat, and inert global hooks. */
+  function mountSection(): void {
+    render(
+      <SsoSection
+        close={() => {}}
+        usePanelInfo={unusedHook}
+        useSessions={unusedHook}
+        useSessionStatus={unusedHook}
+        useSessionRetainInfo={unusedHook}
+        useWorkspaces={unusedHook}
+        useResource={unusedHook}
+        t={translate(en)}
+      />,
+    )
+  }
+
+  it('reports the signed-in state with its expiry and offers signing out', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ authenticated: true, expiresAt: Date.UTC(2026, 0, 2, 3, 4, 5) }),
+      { status: 200 },
+    )))
+    await act(async () => { mountSection() })
+    await waitFor(() => { expect(screen.queryByText(en.signedIn, { exact: false })).not.toBeNull() })
+    expect(screen.queryByRole('button', { name: en.signOut })).not.toBeNull()
+  })
+
+  it('drops the grant through the Host when signing out, then reports signed out', async () => {
+    const requested: string[] = []
+    let authenticated = true
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      requested.push(`${init?.method ?? 'GET'} ${input}`)
+      if (input === '/sso/logout') {
+        authenticated = false
+        return new Response('{}', { status: 200 })
+      }
+      return new Response(JSON.stringify({ authenticated }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await act(async () => { mountSection() })
+    await waitFor(() => { expect(screen.queryByRole('button', { name: en.signOut })).not.toBeNull() })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.signOut })) })
+    await waitFor(() => { expect(screen.queryByText(en.signedOut)).not.toBeNull() })
+    // The section owns no token: signing out is one POST to the Host.
+    expect(requested).toContain('POST /sso/logout')
+  })
+
+  it('offers signing in while the Host holds no grant', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ authenticated: false }), { status: 200 })))
+    await act(async () => { mountSection() })
+    await waitFor(() => { expect(screen.queryByRole('button', { name: en.action })).not.toBeNull() })
+  })
+
+  it('reports the error copy when the status query fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network') }))
+    await act(async () => { mountSection() })
+    await waitFor(() => { expect(screen.queryByText(en.error)).not.toBeNull() })
   })
 })

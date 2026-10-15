@@ -49,7 +49,7 @@ kind: "package-reference"
 
 ### 预期行为
 
-`GET /sso/authorize` 生成 state 与 PKCE verifier 并返回跳转 URL（`mock` 模式直接指回本 Host 的回调，携带 mock code，因此浏览器侧流程与真实流程完全一致）；两者都落在凭据缝的记录半边，因此两段之间 Host 重启不会让这次登录作废。`GET /sso/callback` 是授权服务器的重定向目标：state 校验通过后换 token、提交授予、投影 access token，回一个完成页。`GET /sso/status` 报告认证状态并在进入刷新窗口时续期；`POST /sso/logout` 删除授予并撤回投影。`authorize`/`status`/`logout` 是浏览器 fetch，先过 connection 信任围栏；`callback` 是重定向目标，不能要求浏览器登录 cookie，由 state 承担 CSRF 防护。
+`GET /sso/authorize` 生成 state 与 PKCE verifier 并返回跳转 URL（`mock` 模式直接指回本 Host 的回调，携带 mock code，因此浏览器侧流程与真实流程完全一致）；两者都落在凭据缝的记录半边，因此两段之间 Host 重启不会让这次登录作废。`GET /sso/callback` 是授权服务器的重定向目标：state 校验通过后换 token、提交授予、投影 access token，并回一个 302 回到应用本身（目标是回调自身的父路径，因此把整个应用代理在某前缀下的部署会回到该前缀）——浏览器直接落在首页而不是死胡同。`GET /sso/status` 报告认证状态并在进入刷新窗口时续期；`POST /sso/logout` 删除授予并撤回投影。`authorize`/`status`/`logout` 是浏览器 fetch，先过 connection 信任围栏；`callback` 是重定向目标，不能要求浏览器登录 cookie，由 state 承担 CSRF 防护。
 
 <a id="understanding-the-implementation"></a>
 ## 理解实现

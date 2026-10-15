@@ -380,7 +380,8 @@ describe('single sign-on routes', () => {
 
     // Mock authorize names this Host's own callback with a bound state.
     expect(authorize.authorizeUrl).toMatch(/^http:\/\/app\.internal:3080\/sso\/callback\?code=mock-code-/u)
-    expect(callback.status).toBe(200)
+    expect(callback.status).toBe(302)
+    expect(callback.headers['location']).toBe('/')
     expect(callback.headers['content-type']).toContain('text/html')
     expect(callback.body).toContain('Authorization complete')
 
@@ -391,6 +392,25 @@ describe('single sign-on routes', () => {
     expect(grant!.expiresAt).toBeGreaterThan(Date.now())
     // The access token is projected onto the configured reference.
     expect(mounted.credentials.set).toHaveBeenCalledWith('DSH_ERP_ACCESS_TOKEN', grant!.accessToken)
+  })
+
+  it('returns the browser to the app, keeping a proxied prefix', async () => {
+    const mounted = mount()
+    const authorize = await respond(mounted.route(SSO_AUTHORIZE_PATH), {
+      method: 'GET',
+      url: SSO_AUTHORIZE_PATH,
+      headers: { host: 'app.internal:3080' },
+    })
+    const callbackUrl = new URL((JSON.parse(authorize.body) as SsoAuthorize).authorizeUrl)
+    // A deployment that proxies the whole app under a prefix reaches the
+    // callback there, and the completion must return to that prefix.
+    const prefixed = await respond(mounted.route(SSO_CALLBACK_PATH), {
+      method: 'GET',
+      url: `/erp${callbackUrl.pathname}${callbackUrl.search}`,
+      headers: { host: 'app.internal:3080' },
+    })
+    expect(prefixed.status).toBe(302)
+    expect(prefixed.headers['location']).toBe('/erp')
   })
 
   it.each([401, 403] as const)('answers the fence rejection %i on the browser routes', async (rejection) => {
@@ -506,7 +526,7 @@ describe('single sign-on routes', () => {
       url: `${callbackUrl.pathname}${callbackUrl.search}`,
       headers: { host: 'app.internal:3080' },
     })
-    expect(callback.status).toBe(200)
+    expect(callback.status).toBe(302)
     expect(storedGrant()).toBeDefined()
 
     // Single use still holds across the restart boundary.
@@ -686,7 +706,8 @@ describe('single sign-on (real Loader composition)', () => {
       expect(authorizeUrl).toContain(SSO_CALLBACK_PATH)
 
       const callback = await fetch(authorizeUrl, { redirect: 'manual' })
-      expect(callback.status).toBe(200)
+      expect(callback.status).toBe(302)
+      expect(callback.headers.get('location')).toBe('/')
       await callback.text()
 
       const status = await fetch(`${base}${SSO_STATUS_PATH}`)

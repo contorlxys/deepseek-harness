@@ -114,13 +114,42 @@ function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   res.end(JSON.stringify(payload))
 }
 
-/** Minimal completion page for the browser the identity provider redirects back. */
-function sendCompletePage(res: ServerResponse): void {
-  res.statusCode = 200
+/**
+ * Where the browser belongs once the grant is committed: everything before the
+ * callback's own last path segment. Derived from the request instead of
+ * configured, so a deployment that proxies the whole app under a prefix
+ * returns to that prefix rather than to the absolute root.
+ * @param req - the callback request.
+ * @param config - validated configuration naming the callback path.
+ * @returns the absolute path to redirect to; `/` when nothing precedes the callback.
+ */
+function completionReturnPath(req: IncomingMessage, config: Config): string {
+  const pathname = (req.url ?? '/').split('?')[0] ?? '/'
+  const suffix = config.redirectPath
+  if (suffix !== '' && pathname.endsWith(suffix)) {
+    const prefix = pathname.slice(0, -suffix.length)
+    return prefix === '' ? '/' : prefix
+  }
+  const cut = pathname.lastIndexOf('/')
+  return cut <= 0 ? '/' : pathname.slice(0, cut)
+}
+
+/**
+ * Send the browser back to the application: the completion is a 302 whose
+ * location is the app, so a signed-in user lands on the home screen instead of
+ * on a dead end. The body is the fallback for a client that does not follow
+ * the redirect, and its link is relative for the same reason the location is.
+ * @param req - the callback request.
+ * @param res - the response to end.
+ * @param config - validated configuration naming the callback path.
+ */
+function sendCompleteRedirect(req: IncomingMessage, res: ServerResponse, config: Config): void {
+  res.statusCode = 302
+  res.setHeader('location', completionReturnPath(req, config))
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
   res.end('<!doctype html><html><body style="font-family:system-ui;padding:2rem">'
-    + '<p>Authorization complete. You can return to the application.</p>'
+    + '<p>Authorization complete. <a href="../">Return to the application</a>.</p>'
     + '</body></html>')
 }
 
@@ -377,7 +406,7 @@ export function apply(ctx: Context, config: Config): void {
           redirectUri,
         })
         await commitTokens(tokens)
-        sendCompletePage(res)
+        sendCompleteRedirect(req, res, config)
       } catch (exchangeError) {
         sendJson(res, 502, { code: 'exchange-failed', message: String(exchangeError) })
       }

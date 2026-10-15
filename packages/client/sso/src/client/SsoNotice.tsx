@@ -1,9 +1,8 @@
 /** Frame-wide sign-in notice hosted in `shell.overlay`. */
 import { useEffect, useState, type ReactNode } from 'react'
-import type { SsoAuthorize, SsoStatus } from '@deepseek-ai/dsh-host-sso/shared'
-import { SSO_AUTHORIZE_ROUTE, SSO_STATUS_ROUTE } from '@deepseek-ai/dsh-host-sso/shared'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { beginSsoSignIn, readSsoStatus } from './wire.ts'
 import styles from './SsoNotice.module.css'
 
 /** Render inputs: the locale seat the slot injects. */
@@ -14,29 +13,6 @@ const POLL_INTERVAL_MS = 30_000
 
 /** One live authorization state. */
 type SsoPhase = 'checking' | 'signed-in' | 'signed-out' | 'error'
-
-/** Narrow one status answer to the wire type. */
-function isSsoStatus(value: unknown): value is SsoStatus {
-  if (typeof value !== 'object' || value === null) return false
-  const record = value as Record<string, unknown>
-  return typeof record['authenticated'] === 'boolean'
-    && (record['expiresAt'] === undefined || typeof record['expiresAt'] === 'number')
-}
-
-/** Narrow one authorize answer to the wire type. */
-function isSsoAuthorize(value: unknown): value is SsoAuthorize {
-  if (typeof value !== 'object' || value === null) return false
-  return typeof (value as Record<string, unknown>)['authorizeUrl'] === 'string'
-}
-
-/** Navigate to the Host's authorize URL; the browser never holds a secret. */
-async function beginSignIn(): Promise<void> {
-  const response = await fetch(SSO_AUTHORIZE_ROUTE, { cache: 'no-store' })
-  if (!response.ok) throw new Error(`sso: authorize answered HTTP ${String(response.status)}`)
-  const payload: unknown = await response.json()
-  if (!isSsoAuthorize(payload)) throw new Error('sso: authorize returned no URL')
-  window.location.assign(payload.authorizeUrl)
-}
 
 /**
  * Poll the Host's authorization state and, while signed out, hold a frame-wide
@@ -57,12 +33,9 @@ export function SsoNotice({ t }: SsoNoticeProps): ReactNode {
     }
     const poll = async (): Promise<void> => {
       try {
-        const response = await fetch(SSO_STATUS_ROUTE, { cache: 'no-store' })
-        if (!response.ok) throw new Error(`sso: status answered HTTP ${String(response.status)}`)
-        const payload: unknown = await response.json()
-        if (!isSsoStatus(payload)) throw new Error('sso: status returned no state')
+        const status = await readSsoStatus()
         if (live.stopped) return
-        setPhase(payload.authenticated ? 'signed-in' : 'signed-out')
+        setPhase(status.authenticated ? 'signed-in' : 'signed-out')
       } catch {
         if (live.stopped) return
         setPhase('error')
@@ -83,7 +56,7 @@ export function SsoNotice({ t }: SsoNoticeProps): ReactNode {
       <span className={styles.text}>{phase === 'error' ? t('error') : t('notice')}</span>
       {phase === 'error'
         ? <Button variant="outline" onClick={() => { setPhase('checking') }}>{t('retry')}</Button>
-        : <Button variant="primary" onClick={() => { void beginSignIn() }}>{t('action')}</Button>}
+        : <Button variant="primary" onClick={() => { void beginSsoSignIn() }}>{t('action')}</Button>}
     </div>
   )
 }

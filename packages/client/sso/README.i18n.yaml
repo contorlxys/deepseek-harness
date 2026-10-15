@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/sso/README.md
 /:
-  en: 1f3930a32da1e75c
-  zh: 051c5f85a7591f56
+  en: 98e8ce1e76c4dde1
+  zh: cc5a8cca88c0d2d5
 /deepseek-ai-dsh-client-sso:
   en: 508158adbac1c6d7
   zh: 508158adbac1c6d7
 /deepseek-ai-dsh-client-sso/summary:
-  en: e860bf2344bc4673
-  zh: 79f9294de8c2ff8a
+  en: b815ab2fc9f26c67
+  zh: 103b3b1caace68a9
 /deepseek-ai-dsh-client-sso/sections:
   en: 8a8119d124cbce6b
   zh: d8d0b09761e46529
 /deepseek-ai-dsh-client-sso/using-this-package:
-  en: d7c1a0258767f9ee
-  zh: 3355d7c144262a3b
+  en: 3d080f3aad1d6113
+  zh: dd19d517d6990c59
 /deepseek-ai-dsh-client-sso/understanding-the-implementation:
-  en: 9d1a35ef1c858aac
-  zh: fe749183221d2b03
+  en: 5860fbe9578db66a
+  zh: d928268068356271
 /deepseek-ai-dsh-client-sso/model-experience:
   en: 5a50dcd56e34b9b6
   zh: 3ae9b7f7c8f67e38

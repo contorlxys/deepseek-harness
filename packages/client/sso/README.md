@@ -1,5 +1,5 @@
 ---
-description: "Browser half of Web single sign-on: a frame-wide sign-in notice that prompts authorization while the Host holds no grant, starting the Host's PKCE round trip"
+description: "Browser half of Web single sign-on: a frame-wide sign-in notice that prompts authorization while the Host holds no grant, plus a settings section reporting the live state and dropping the grant"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`@deepseek-ai/dsh-client-sso` is the browser half of Web single sign-on. It registers one entry into the `shell.overlay` layer that polls the Host's authorization state (`GET /sso/status`) and, while the grant is absent, holds a frame-wide notice whose action starts the round trip. The component fetches `GET /sso/authorize`, navigates to the answered URL, and otherwise stays out of the way — the Host owns every secret, the token exchange, and the credential projection. See [`@deepseek-ai/dsh-host-sso`](../../host/sso/README.md) for the Host-side behavior and the wire contract.
+`@deepseek-ai/dsh-client-sso` is the browser half of Web single sign-on. It registers one entry into the `shell.overlay` layer that polls the Host's authorization state (`GET /sso/status`) and, while the grant is absent, holds a frame-wide notice whose action starts the round trip. The component fetches `GET /sso/authorize`, navigates to the answered URL, and otherwise stays out of the way — the Host owns every secret, the token exchange, and the credential projection. It also registers one `settings.section` entry that reports the live state with the access token's expiry and offers the one action that state allows: signing in, or signing out through `POST /sso/logout`. See [`@deepseek-ai/dsh-host-sso`](../../host/sso/README.md) for the Host-side behavior and the wire contract.
 
 ## Sections
 
@@ -32,10 +32,12 @@ The notice polls on a fixed cadence and answers one of three render states:
 
 The polling cadence is a UX constant, not a deployment knob, so it stays in the component rather than in `Config`.
 
+The settings section is where the state stays visible after the notice withdraws itself: it reports signed in (with the access token's expiry) or not signed in, and its button signs out through the Host — one `POST /sso/logout` removes the stored grant and withdraws the projected token, so consumers lose their authorization on their next request. Nothing but an action label lives in the browser: the section never holds a token, and a gateway-side revocation stays the identity provider's own concern.
+
 <a id="understanding-the-implementation"></a>
 ## Understanding the implementation
 
-The component is self-contained: it owns its `useEffect` poll loop and its action, registering only an `id` into `shell.overlay` so it never displaces another entry. The wire boundary is narrowed at each fetch (`isSsoStatus`, `isSsoAuthorize`), so a malformed Host answer fails loudly instead of rendering a blank banner. The action never touches a secret — it fetches an already-constructed `authorizeUrl` and calls `window.location.assign` on it; the PKCE verifier and the code exchange stay on the Host. Once the Host's completion page returns the browser and the next poll observes the grant, the component withdraws itself, and the Host's `credentials/reference-updated` fan-out is what makes consumers (MCP transports) reconnect with the fresh token.
+The components are self-contained: the notice owns its `useEffect` poll loop, the section reads the state once on mount and re-reads it after an action, and each registers only an `id` (into `shell.overlay` and `settings.section` respectively) so neither displaces another entry. The wire boundary lives in one module, `wire.ts`: both components narrow every answer there (`isSsoStatus`, `isSsoAuthorize`), so a malformed Host answer fails loudly instead of rendering a blank surface. The action never touches a secret — it fetches an already-constructed `authorizeUrl` and calls `window.location.assign` on it; the PKCE verifier and the code exchange stay on the Host. Once the Host's completion page returns the browser and the next poll observes the grant, the component withdraws itself, and the Host's `credentials/reference-updated` fan-out is what makes consumers (MCP transports) reconnect with the fresh token.
 
 ## Model Experience
 

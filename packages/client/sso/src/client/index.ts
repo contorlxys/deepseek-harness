@@ -11,8 +11,11 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+// Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { SsoNotice } from './SsoNotice.tsx'
+import { SsoSection } from './SsoSection.tsx'
 import { en, zh, type SsoLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -30,7 +33,8 @@ export const inject = ['slots', 'locale']
 
 /**
  * Contribute the sign-in notice to the frame-wide overlay under this plugin's
- * own id, replacing no one.
+ * own id, replacing no one, and one settings section where the signed-in state
+ * can be inspected and dropped.
  * @param ctx - the browser plugin context.
  */
 export function apply(ctx: ClientContext): void {
@@ -40,6 +44,15 @@ export function apply(ctx: ClientContext): void {
     id: 'sso.notice',
     locale: NS,
   }, SsoNotice))
+  // Ordered last: sign-in state is an account-level concern, and the settings
+  // nav reads top-down from routine choices to deployment-shaped ones.
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'sso',
+    order: 30,
+    label: () => ctx.locale.bind(NS)('sectionTitle'),
+    locale: NS,
+  }, SsoSection))
 }
 
 export type { SsoNoticeProps } from './SsoNotice.tsx'

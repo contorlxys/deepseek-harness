@@ -1,5 +1,5 @@
 ---
-description: "浏览器半的 Web 单点登录：在 Host 未持有授权时给出框级登录提示，启动 Host 的 PKCE 往返"
+description: "浏览器半的 Web 单点登录：在 Host 未持有授权时给出框级登录提示，另有一个设置区展示实时状态并可撤销授权"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.md)
 
 ## 摘要
 
-`@deepseek-ai/dsh-client-sso` 是 Web 单点登录的浏览器半。它往 `shell.overlay` 层注册一个条目，轮询 Host 的授权状态（`GET /sso/status`），在授权授予缺失期间常驻一条框级提示，其动作启动该往返。组件去取 `GET /sso/authorize`、跳转到返回的 URL，其余时间不插手——Host 独占每个秘密、令牌交换与凭据投影。Host 侧行为与线协议见 [`@deepseek-ai/dsh-host-sso`](../../host/sso/README.zh.md)。
+`@deepseek-ai/dsh-client-sso` 是 Web 单点登录的浏览器半。它往 `shell.overlay` 层注册一个条目，轮询 Host 的授权状态（`GET /sso/status`），在授权授予缺失期间常驻一条框级提示，其动作启动该往返。组件去取 `GET /sso/authorize`、跳转到返回的 URL，其余时间不插手——Host 独占每个秘密、令牌交换与凭据投影。它还往 `settings.section` 注册一个区，展示实时状态与 access token 到期时间，并提供该状态下唯一可用的动作：去认证，或经 `POST /sso/logout` 退出登录。Host 侧行为与线协议见 [`@deepseek-ai/dsh-host-sso`](../../host/sso/README.zh.md)。
 
 ## 目录
 
@@ -32,10 +32,12 @@ English | [中文](README.md)
 
 轮询节奏是 UX 常量而非部署旋钮，因此它留在组件内，不进 `Config`。
 
+设置区是提示自行撤除后状态仍然可见的地方：它显示已登录（含 access token 到期时间）或未登录，按钮则经 Host 退出登录——一次 `POST /sso/logout` 删除已存授予并撤回投影，消费方下一次请求即失去授权。浏览器侧除动作文案外不持有任何东西：该区从不持有 token，网关侧的撤销仍属身份提供方自己的事。
+
 <a id="understanding-the-implementation"></a>
 ## 理解实现
 
-组件是自包含的：它自己持有 `useEffect` 轮询循环与动作，只向 `shell.overlay` 注册一个 `id`，因此不会替掉别的条目。每次 fetch 都收窄线边界（`isSsoStatus`、`isSsoAuthorize`），Host 返回畸形答案时会大声失败，而不是渲染空白横幅。动作绝不接触秘密——它去取已经构造好的 `authorizeUrl` 并对其调用 `window.location.assign`；PKCE verifier 与 code 交换都留在 Host。等 Host 的完成页把浏览器带回、下一次轮询观察到授予，组件自行撤除，而 Host 的 `credentials/reference-updated` 扇出正是让消费方（MCP transport）带着新 token 重连的原因。
+两个组件都是自包含的：提示自己持有 `useEffect` 轮询循环，设置区在挂载时读一次状态、动作后再读一次；各自只注册一个 `id`（分别进 `shell.overlay` 与 `settings.section`），因此都不会替掉别的条目。线边界集中在一个模块 `wire.ts`：两个组件都在那里收窄每个答案（`isSsoStatus`、`isSsoAuthorize`），Host 返回畸形答案时会大声失败，而不是渲染空白表面。动作绝不接触秘密——它去取已经构造好的 `authorizeUrl` 并对其调用 `window.location.assign`；PKCE verifier 与 code 交换都留在 Host。等 Host 的完成页把浏览器带回、下一次轮询观察到授予，组件自行撤除，而 Host 的 `credentials/reference-updated` 扇出正是让消费方（MCP transport）带着新 token 重连的原因。
 
 ## Model Experience
 
