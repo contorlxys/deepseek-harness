@@ -1,0 +1,21 @@
+.notice {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--dsh-color-warning-bg, #fff7e6);
+  border-bottom: 1px solid var(--dsh-color-warning-border, #ffd591);
+  font-size: 13px;
+  z-index: 100;
+}
+
+.text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

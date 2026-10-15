@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 const boot = vi.hoisted(() => ({
   run: vi.fn(),
@@ -9,12 +9,6 @@ vi.mock('@deepseek-ai/dsh-client-web', () => ({
   AppWebEntry: class { run = boot.run },
   applyIndexInjections: boot.applyIndexInjections,
 }))
-
-beforeEach(() => {
-  // The single sign-on gate probes for a runtime configuration file before it
-  // starts the shell; this deployment ships none, and no socket may leave the suite.
-  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('dsh-sso.config.json: not served') }))
-})
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -33,7 +27,7 @@ it('forwards client initialization failures to native recovery', async () => {
   await import('../src/main.ts')
   await gate.promise
   expect(boot.applyIndexInjections).toHaveBeenCalledWith([], expect.any(Function))
-  // The shell starts once the single sign-on gate settles.
+  // The shell starts once the boot-readiness gate settles.
   await vi.waitFor(() => { expect(boot.run).toHaveBeenCalled() })
   const report = boot.run.mock.calls[0]![0] as (reason: unknown) => void
   report(new Error('client plugin activation failed'))

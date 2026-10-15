@@ -1,0 +1,31 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/sso/README.md
+/:
+  en: 1f3930a32da1e75c
+  zh: 051c5f85a7591f56
+/deepseek-ai-dsh-client-sso:
+  en: 508158adbac1c6d7
+  zh: 508158adbac1c6d7
+/deepseek-ai-dsh-client-sso/summary:
+  en: e860bf2344bc4673
+  zh: 79f9294de8c2ff8a
+/deepseek-ai-dsh-client-sso/sections:
+  en: 8a8119d124cbce6b
+  zh: d8d0b09761e46529
+/deepseek-ai-dsh-client-sso/using-this-package:
+  en: d7c1a0258767f9ee
+  zh: 3355d7c144262a3b
+/deepseek-ai-dsh-client-sso/understanding-the-implementation:
+  en: 9d1a35ef1c858aac
+  zh: fe749183221d2b03
+/deepseek-ai-dsh-client-sso/model-experience:
+  en: 5a50dcd56e34b9b6
+  zh: 3ae9b7f7c8f67e38
+/deepseek-ai-dsh-client-sso/model-experience/kv-cache-effect:
+  en: 4883f372e6e1bcf4
+  zh: 7beb1b3b9f5a89e4
+/deepseek-ai-dsh-client-sso/known-limitations-and-deferred-work:
+  en: 934d6c2a2f70665c
+  zh: ce38ed98f737cc19

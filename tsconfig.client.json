@@ -91,6 +91,7 @@
     { "path": "./packages/test-support/client-runtime" },
     { "path": "./packages/test-support/remote-mock" },
     { "path": "./packages/client/shortcuts/tsconfig.client.json" },
+    { "path": "./packages/client/sso/tsconfig.client.json" },
     { "path": "./packages/client/ui-shortcuts" },
     { "path": "./packages/client/ui-layout" },
     { "path": "./packages/client/ui-sidebar" },

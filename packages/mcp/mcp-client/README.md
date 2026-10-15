@@ -49,8 +49,10 @@ Add one entry per server; nothing else is required. After the harness starts, th
     transport: streamable-http
     url: http://localhost:3000/mcp
     headers:
-      Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
+      Authorization: 'Bearer ${cred:DSH_ERP_ACCESS_TOKEN}'
 ```
+
+`env` and `headers` values may reference the credential seam with `${cred:NAME}` occurrences. References resolve at every connection attempt — a transport snapshots its env and headers for the life of one connection — and an update to a referenced name (a `credentials/reference-updated` event) recycles the live connection, so a rotated token reaches the server without a Host restart. A referenced-but-unconfigured name, or a composition without a credentials provider, fails the attempt loudly; the reconnect policy keeps retrying while the credential may still land, and a supervisor that exhausted its budget needs a plugin reload.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -58,6 +60,7 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `serverName` | required | Namespace for the server's tool names; `[A-Za-z0-9_-]{1,32}`, unique inside one registration scope |
 | `command` / `args` / `env` / `cwd` | — | stdio: executable, arguments, extra env merged over scrubbed ambient env, working directory |
 | `url` / `headers` | — | streamable-http: endpoint URL and extra request headers |
+| `auth.credentialRef` | `''` (off) | streamable-http: credential reference read before every request and sent as `Authorization: Bearer`; empty disables per-request authentication |
 | `toolCallTimeoutMs` | `60,000` | Timeout per `tools/call` or resource request |
 | `maxInstructionBytes` | `32,768` | Maximum UTF-8 bytes of server instructions including attribution; an oversized value rejects the connection |
 | `failOnStartupError` | `false` | Reject plugin activation when the initial connection or tool synchronization fails |
@@ -65,6 +68,23 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `reconnect.initialDelayMs` | `500` | First reconnect delay; doubles per consecutive failed attempt |
 | `reconnect.maxDelayMs` | `30,000` | Backoff ceiling; also the uptime after which the attempt budget resets |
 | `reconnect.maxAttempts` | `10` | Consecutive failed attempts per outage before giving up |
+
+### Authenticating one Streamable HTTP server
+
+`auth.credentialRef` names the access token for a Streamable HTTP server. The transport reads that credential before every request and sends it as `Authorization: Bearer <token>`, so a token rotated in place reaches the server without a reconnect — the case a `headers` value cannot serve, because a transport snapshots its headers for its lifetime. When the server answers 401 the credential is read once more for the SDK's automatic retry, and a value that did not change is logged as a rejection the operator must resolve rather than retried forever.
+
+```yaml
+- id: mcp-erp
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: erp
+    transport: streamable-http
+    url: https://erp.example.com/mcp
+    auth:
+      credentialRef: DSH_ERP_ACCESS_TOKEN
+```
+
+`auth` owns the `Authorization` header: configuring it beside a request header of that name fails the plugin at load, because the SDK writes that header from the token source and the configured copy would never be sent. Only Streamable HTTP can carry per-request authentication — a child process receives its environment once at spawn, so a stdio server carries its credential as a `${cred:NAME}` env value instead.
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-mcp-client) is the exhaustive source for every accepted field.
 

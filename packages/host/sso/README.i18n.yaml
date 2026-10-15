@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/host/sso/README.md
+/:
+  en: 1c15adde5a70c483
+  zh: 1c15adde5a70c483
+/deepseek-ai-dsh-host-sso:
+  en: a6691f9fddc6be66
+  zh: 682ca33d40ff069a
+/deepseek-ai-dsh-host-sso/summary:
+  en: cf7cc80bf2f41a63
+  zh: 3242579aaeebce25
+/deepseek-ai-dsh-host-sso/sections:
+  en: f7a028b186dcc431
+  zh: d8d0b09761e46529
+/deepseek-ai-dsh-host-sso/using-this-package:
+  en: d021184756e436ad
+  zh: 4afe13600f03aaa2
+/deepseek-ai-dsh-host-sso/using-this-package/minimal-configuration:
+  en: 3a2ba7c64825612c
+  zh: 3637b275deceb9f1
+/deepseek-ai-dsh-host-sso/using-this-package/expected-behavior:
+  en: 379ecc695bea77ee
+  zh: a384bd691a7e8f70
+/deepseek-ai-dsh-host-sso/understanding-the-implementation:
+  en: 2d0112570c4b178c
+  zh: c0c923af826f4088
+/deepseek-ai-dsh-host-sso/model-experience:
+  en: 0e475eaf57564830
+  zh: 6aa3b80f2a0d5174
+/deepseek-ai-dsh-host-sso/model-experience/kv-cache-effect:
+  en: d94ae56157af4b2c
+  zh: 58c28197f5aae7a2
+/deepseek-ai-dsh-host-sso/known-limitations-and-deferred-work:
+  en: c9b44ccf35abcb1f
+  zh: fc06205591eef604

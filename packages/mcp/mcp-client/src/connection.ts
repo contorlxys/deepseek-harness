@@ -20,6 +20,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { assertNever, type JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ServerContext } from './server-context.ts'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
+import { resolveCredentialTemplates, type CredentialRefResolver } from './credential-refs.ts'
+import type { TransportAuth } from './request-auth.ts'
 import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
 import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
@@ -113,6 +115,16 @@ export interface ConnectionHandle extends ServerContext {
    * unregister every tool this server still owns.
    */
   dispose(): Promise<void>
+  /**
+   * Drop the live connection so the supervisor reconnects — and the reconnect
+   * re-resolves every credential reference in the transport configuration.
+   * Credential updates call this; a configuration without references never
+   * does. With no live generation this is a no-op: a connection that already
+   * failed keeps retrying per its reconnect policy and re-resolves there,
+   * while a supervisor that gave up needs a plugin reload.
+   * @param reason - logged diagnostic naming what changed.
+   */
+  recycle(reason: string): void
 }
 
 /**
@@ -122,9 +134,19 @@ export interface ConnectionHandle extends ServerContext {
  * @param ctx - Cordis context providing the `tools` registry and logger.
  * @param config - Resolved plugin config selecting the transport and server identity.
  * @param policy - Resolved reconnect policy from {@link resolveReconnectPolicy}.
+ * @param resolveCredentials - Resolves one `${cred:NAME}` reference to its current value;
+ *   undefined when the configuration references no credentials.
+ * @param requestAuth - Per-request authentication for a Streamable HTTP
+ *   transport, read before every request rather than once per connection.
  * @returns Handle with a `ready` promise for startup-await and a `dispose` for teardown.
  */
-export function startConnection(ctx: Context, config: Config, policy: ResolvedReconnectPolicy): ConnectionHandle {
+export function startConnection(
+  ctx: Context,
+  config: Config,
+  policy: ResolvedReconnectPolicy,
+  resolveCredentials?: CredentialRefResolver,
+  requestAuth?: TransportAuth,
+): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
   const incompleteDisposalMessage = `${label}: transport closure could not be confirmed during disposal — server shutdown may be incomplete`
   const opts: ToolBridgeOptions = {
@@ -304,7 +326,14 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     }
     let instructions: string
     try {
-      transport = createTransport(config)
+      // Credential references re-resolve on every attempt: a transport
+      // snapshots env/headers for its lifetime, so this is the per-connection
+      // resolution that lets a changed credential reach the next generation.
+      // Per-request authentication travels beside the config instead: the
+      // transport reads it again before every request.
+      transport = createTransport(resolveCredentials === undefined
+        ? config
+        : await resolveCredentialTemplates(config, resolveCredentials), requestAuth)
       await generation.connect(transport)
       if (hasClosed()) {
         attemptSettled = true
@@ -363,6 +392,15 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   return {
     ready,
     instructions: () => serverInstructions,
+    recycle(reason: string): void {
+      const close = closeClient
+      if (client === undefined || close === undefined) return
+      ctx.logger.info(`${label}: ${reason}; recycling connection to re-resolve credential references`)
+      // The SDK's close fires onclose for an established generation, which
+      // routes through generationDown into the reconnect path; closeClient
+      // itself never rejects.
+      void close()
+    },
     resources: {
       async request(request, exec): Promise<JsonValue> {
         const generation = client

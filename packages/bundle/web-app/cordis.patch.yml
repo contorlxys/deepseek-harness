@@ -235,6 +235,18 @@
         # The listener's bind IP is accepted separately from this list.
         trustedHosts: !!js ctx.webStartup.trustedHosts
 
+    # Web single sign-on: runs the PKCE authorization-code round trip against
+    # the identity provider, stores the grant in the credential seam, refreshes
+    # tokens, and projects the current access token onto a credential reference
+    # consumers resolve; the browser never holds a token or the authorization code.
+    - id: sso
+      name: '@deepseek-ai/dsh-host-sso'
+
+    # Browser half of the same single sign-on: a frame-wide notice prompting the
+    # sign-in that starts the Host's round trip, withdrawn once the grant exists.
+    - id: client-sso
+      name: '@deepseek-ai/dsh-client-sso'
+
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.
     - id: file-upload

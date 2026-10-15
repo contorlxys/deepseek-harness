@@ -1623,6 +1623,59 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-product-telemetry-otel -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-host-sso -->
+<a id="deepseek-aidsh-host-sso"></a>
+
+## `@deepseek-ai/dsh-host-sso`
+
+- `inject`: `webServer` · `connection` · `credentials`
+- `source`: [`packages/host/sso/src/index.ts:43`](../packages/host/sso/src/index.ts)
+
+```ts config-catalog
+/** Single sign-on host configuration. */
+export interface Config {
+  /** `mock` derives tokens without network; `remote` runs the real round trip. */
+  readonly mode: 'mock' | 'remote'
+  /**
+   * Authorization endpoint, or the front-end relay page that forwards to it;
+   * required exactly when `mode` is `remote`. With a fragment
+   * (`https://idp/#/oauth2/`) the parameters ride inside the fragment
+   * (`#/oauth2/?…`), where a hash-routed relay reads them from the full href.
+   */
+  readonly authorizeUrl: string
+  /** Token endpoint; required exactly when `mode` is `remote`. */
+  readonly tokenUrl: string
+  /** Public OAuth2 client identifier; required exactly when `mode` is `remote`. */
+  readonly clientId: string
+  /**
+   * Confidential-client secret for the token endpoint, or empty for a public
+   * PKCE client; falls back to `$DSH_SSO_CLIENT_SECRET`. It stays host-side:
+   * never logged and never sent to the browser.
+   */
+  readonly clientSecret: string
+  /** Requested scope; empty omits the parameter. */
+  readonly scope: string
+  /** Callback path the authorize redirect targets. */
+  readonly redirectPath: string
+  /**
+   * Absolute callback URL registered with the identity provider; empty derives
+   * `http://<request Host><redirectPath>`. Set it when the deployment is
+   * reached through TLS or a proxy, where the derived origin would not match
+   * the registration.
+   */
+  readonly redirectUri: string
+  /** This plugin's own addressing unit for the grant record. */
+  readonly credentialKey: string
+  /** Credential reference the access token is projected onto. */
+  readonly credentialRef: string
+  /** Refresh this long before the access token expires, in milliseconds. */
+  readonly expirySkewMs: number
+  /** Deadline for one remote exchange in milliseconds. */
+  readonly exchangeTimeoutMs: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-host-sso -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-host-webserver -->
 <a id="deepseek-aidsh-host-webserver"></a>
 
@@ -2157,7 +2210,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:104`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:120`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2189,6 +2242,12 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Per-request authentication. A child process receives its environment once
+   * at spawn, so a stdio server must carry its credential in a `${cred:NAME}`
+   * env value instead and leave this empty.
+   */
+  auth?: RequestAuthConfig
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -2213,6 +2272,12 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Per-request authentication: the access token is read from the credential
+   * seam before every request, so a rotated token reaches the server without a
+   * reconnect. Omission leaves requests with {@link StreamableHttpConfig.headers} alone.
+   */
+  auth?: RequestAuthConfig
 }
 
 /** Automatic reconnect policy for one MCP server connection. */
@@ -2225,6 +2290,15 @@ export interface ReconnectConfig {
   maxDelayMs?: number
   /** Consecutive failed attempts per outage before giving up for good (default 10). */
   maxAttempts?: number
+}
+
+/** Configured per-request authentication; an empty reference disables it. */
+export interface RequestAuthConfig {
+  /**
+   * Credential reference naming the current access token. Empty (the schema
+   * default) leaves every request with the configured headers alone.
+   */
+  credentialRef: string
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-mcp-client -->
@@ -4509,6 +4583,7 @@ export interface Config {
 | `@deepseek-ai/dsh-client-locale` | — | [`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts) |
 | `@deepseek-ai/dsh-client-modules` | `loader` | [`packages/client/modules/src/index.ts`](../packages/client/modules/src/index.ts) |
 | `@deepseek-ai/dsh-client-resources` | — | [`packages/client/resources/src/index.ts`](../packages/client/resources/src/index.ts) |
+| `@deepseek-ai/dsh-client-sso` | — | [`packages/client/sso/src/index.ts`](../packages/client/sso/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-agent-preset` | — | [`packages/client/ui-agent-preset/src/index.ts`](../packages/client/ui-agent-preset/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-approval` | — | [`packages/client/ui-approval/src/index.ts`](../packages/client/ui-approval/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-attachment` | — | [`packages/client/ui-attachment/src/index.ts`](../packages/client/ui-attachment/src/index.ts) |

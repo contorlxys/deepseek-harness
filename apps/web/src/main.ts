@@ -1,7 +1,6 @@
 /** Browser entry for the Web client. */
 import '@deepseek-ai/dsh-client-ui-theme/brand-font.css'
 import { AppWebEntry, applyIndexInjections } from '@deepseek-ai/dsh-client-web'
-import { runSsoGate } from './sso/gate.ts'
 
 interface DesktopBootGlobal {
   dshDesktopBoot?: {
@@ -34,17 +33,7 @@ try {
       gate.resolve()
     }).catch((error: unknown) => { gate.reject(error) })
   }
-  // The single sign-on gate is disabled unless the deployment enables it; it
-  // owns the page until the authorization server returns a code, then the
-  // shell boots. A disabled gate resolves without a code, and the caller
-  // starts the shell. AppWebEntry is constructed inside startShell: its
-  // constructor draws the full-screen boot page, which must not cover the card.
-  const startShell = (): void => {
-    void new AppWebEntry(el).run(desktop === undefined ? undefined : reportFailure)
-  }
-  void runSsoGate({ container: el, onAuthorized: startShell })
-    .then((code) => { if (code === undefined) startShell() })
-    .catch((error: unknown) => { reportFailure(error) })
+  void new AppWebEntry(el).run(desktop === undefined ? undefined : reportFailure)
 } catch (reason) {
   reportFailure(reason)
 }

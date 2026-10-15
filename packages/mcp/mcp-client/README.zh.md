@@ -49,8 +49,10 @@ kind: "package-reference"
     transport: streamable-http
     url: http://localhost:3000/mcp
     headers:
-      Authorization: !!js '`Bearer ${process.env.MCP_TOKEN}`'
+      Authorization: 'Bearer ${cred:DSH_ERP_ACCESS_TOKEN}'
 ```
+
+`env` 与 `headers` 的值可以用 `${cred:NAME}` 引用凭据缝。引用在每次连接尝试时解析——一条 transport 在其生命周期内对 env 和 headers 做静态快照——而被引用名字的更新（`credentials/reference-updated` 事件）会回收现有连接，轮换后的 token 无需重启 Host 即可到达服务器。引用了未配置的名字、或组合中没有凭据提供方，都会让连接尝试大声失败；重连策略会在凭据可能到位期间持续重试，耗尽预算的 supervisor 则需要重载插件。
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
@@ -58,6 +60,7 @@ kind: "package-reference"
 | `serverName` | 必填 | 服务器工具名称的 namespace；`[A-Za-z0-9_-]{1,32}`，在一个注册作用域内唯一 |
 | `command` / `args` / `env` / `cwd` | — | stdio：可执行文件、参数、合并到清洗过的环境之上的额外环境变量、工作目录 |
 | `url` / `headers` | — | streamable-http：端点 URL 与额外请求标头 |
+| `auth.credentialRef` | `''`（关闭） | streamable-http：每个请求之前读取、并以 `Authorization: Bearer` 发送的凭据引用；留空即关闭逐请求认证 |
 | `toolCallTimeoutMs` | `60,000` | 每次 `tools/call` 或资源请求的超时 |
 | `maxInstructionBytes` | `32,768` | 包括服务器归属信息在内的服务器指令 UTF-8 字节上限；超出时连接失败 |
 | `failOnStartupError` | `false` | 初始连接或工具同步失败时拒绝插件激活 |
@@ -65,6 +68,23 @@ kind: "package-reference"
 | `reconnect.initialDelayMs` | `500` | 首次重连延迟；每次连续失败尝试翻倍 |
 | `reconnect.maxDelayMs` | `30,000` | 退避上限；同时是重置尝试预算所需的正常运行时长 |
 | `reconnect.maxAttempts` | `10` | 每次中断内连续失败尝试次数上限，超出后放弃 |
+
+### 为一个 Streamable HTTP 服务器认证
+
+`auth.credentialRef` 指定 Streamable HTTP 服务器的访问令牌。传输层在每个请求之前读取该凭据，并以 `Authorization: Bearer <token>` 发送，因此在原地轮换的 token 无需重连即可到达服务器——这是 `headers` 取值做不到的情形，因为一条 transport 在其生命周期内对请求头做静态快照。服务器应答 401 时会再读取一次凭据，供 SDK 的自动重试使用；取值没有变化则记为需要人工处理的拒绝，而不是无限重试。
+
+```yaml
+- id: mcp-erp
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: erp
+    transport: streamable-http
+    url: https://erp.example.com/mcp
+    auth:
+      credentialRef: DSH_ERP_ACCESS_TOKEN
+```
+
+`auth` 独占 `Authorization` 标头：与同名请求头同时配置会在加载时拒绝该插件，因为该标头由 SDK 依据 token 源写入，配置的那一份永远不会被发送。只有 Streamable HTTP 能承载逐请求认证——子进程只在启动时接收一次环境，因此 stdio 服务器用 `${cred:NAME}` 环境变量携带凭据。
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-mcp-client)是每个受支持字段的穷尽式真源。
 

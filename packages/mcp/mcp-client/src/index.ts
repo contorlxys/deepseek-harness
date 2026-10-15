@@ -14,11 +14,14 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import z from '@deepseek-ai/schemastery'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
+import { referencedCredentialNames, type CredentialRefResolver } from './credential-refs.ts'
+import { createRequestAuth, hasAuthorizationHeader, type RequestAuthConfig } from './request-auth.ts'
 import { registerServerContext } from './server-context.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
@@ -26,6 +29,7 @@ import type {} from '@deepseek-ai/dsh-tools'
 export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
+export type { RequestAuthConfig, TransportAuth } from './request-auth.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-client'
@@ -74,6 +78,12 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Per-request authentication. A child process receives its environment once
+   * at spawn, so a stdio server must carry its credential in a `${cred:NAME}`
+   * env value instead and leave this empty.
+   */
+  auth?: RequestAuthConfig
 }
 
 /** Config for connecting to an MCP server over Streamable HTTP (SSE). */
@@ -98,15 +108,21 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
+  /**
+   * Per-request authentication: the access token is read from the credential
+   * seam before every request, so a rotated token reaches the server without a
+   * reconnect. Omission leaves requests with {@link StreamableHttpConfig.headers} alone.
+   */
+  auth?: RequestAuthConfig
 }
 
 /** Configuration for one stdio or Streamable HTTP MCP server. */
 export type Config = StdioConfig | StreamableHttpConfig
 
-type StdioConfigInput = Omit<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>
-  & Partial<Pick<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError'>>
-type StreamableHttpConfigInput = Omit<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError'>
-  & Partial<Pick<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError'>>
+type StdioConfigInput = Omit<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError' | 'auth'>
+  & Partial<Pick<StdioConfig, 'args' | 'env' | 'cwd' | 'toolCallTimeoutMs' | 'failOnStartupError' | 'auth'>>
+type StreamableHttpConfigInput = Omit<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError' | 'auth'>
+  & Partial<Pick<StreamableHttpConfig, 'headers' | 'toolCallTimeoutMs' | 'failOnStartupError' | 'auth'>>
 type ConfigInput = StdioConfigInput | StreamableHttpConfigInput
 
 const Reconnect: z<ReconnectConfig> = z.object({
@@ -114,6 +130,16 @@ const Reconnect: z<ReconnectConfig> = z.object({
   initialDelayMs: z.number().min(1).max(MAX_TIMER_DELAY_MS).default(RECONNECT_DEFAULTS.initialDelayMs),
   maxDelayMs: z.number().min(1).max(MAX_TIMER_DELAY_MS).default(RECONNECT_DEFAULTS.maxDelayMs),
   maxAttempts: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(RECONNECT_DEFAULTS.maxAttempts),
+})
+
+/**
+ * Per-request authentication block. Schemastery materializes a nested object,
+ * so "no per-request authentication" is the empty reference rather than an
+ * absent key, and an empty reference names nothing — the same reading the
+ * credential seam gives an empty stored secret.
+ */
+const Auth: z<RequestAuthConfig> = z.object({
+  credentialRef: z.string().default(''),
 })
 
 export const Config = z.union([
@@ -128,6 +154,7 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: Reconnect,
+    auth: Auth,
   }),
   z.object({
     transport: z.const('streamable-http'),
@@ -138,6 +165,7 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
     reconnect: Reconnect,
+    auth: Auth,
   }),
 ]) as z<ConfigInput, Config>
 
@@ -156,6 +184,27 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // construction that bypassed Schemastery) rejects THIS instance before any
   // effect registers.
   const reconnect = resolveReconnectPolicy(config.reconnect, `mcp-client(${config.serverName}): reconnect`)
+
+  // Per-request authentication is validated before any effect registers, so a
+  // misconfigured instance fails at load instead of at its first request. Only
+  // Streamable HTTP can carry it: a child process receives its environment once
+  // at spawn, which is what the `${cred:NAME}` env form exists for.
+  const authRef = config.auth?.credentialRef ?? ''
+  if (authRef !== '') {
+    if (config.transport !== 'streamable-http') {
+      throw new Error(
+        `mcp-client(${config.serverName}): auth requires the streamable-http transport — a stdio server receives its credential through a "\${cred:NAME}" env value`,
+      )
+    }
+    if (!isCredentialRefName(authRef)) {
+      throw new Error(`mcp-client(${config.serverName}): auth.credentialRef "${authRef}" is not a valid credential name`)
+    }
+    if (hasAuthorizationHeader(config.headers)) {
+      throw new Error(
+        `mcp-client(${config.serverName}): auth owns the "Authorization" header — an "Authorization" request header configured beside it would never be sent; remove the header (auth sends "Bearer <token>") or the auth block`,
+      )
+    }
+  }
 
   // Reserve the namespace next: a duplicate `serverName` fails THIS instance
   // at load with an actionable error and leaves the earlier instance intact.
@@ -178,7 +227,30 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The supervisor owns the client/transport generations, the reconnect
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
-  const connection = startConnection(ctx, config, reconnect)
+  // Credential references re-resolve at every connection attempt, and an
+  // update to a referenced name recycles the live connection. Per-request
+  // authentication shares that resolution path but is read by the transport
+  // before every request, so a rotated access token needs no reconnect.
+  const credentialRefs = referencedCredentialNames(config)
+  const resolveCredential: CredentialRefResolver = async (name) => {
+    const credentials = ctx.get('credentials')
+    if (credentials === undefined) {
+      throw new Error(`mcp-client(${config.serverName}): credential "${name}" is referenced but no credentials provider is loaded`)
+    }
+    const resolved = await credentials.resolve(credentialRef(name))
+    if (resolved === undefined) {
+      throw new Error(`mcp-client(${config.serverName}): credential "${name}" is referenced but not configured`)
+    }
+    return resolved.value
+  }
+  const resolveCredentials: CredentialRefResolver | undefined = credentialRefs.size === 0 ? undefined : resolveCredential
+  const requestAuth = authRef === '' ? undefined : createRequestAuth(ctx, config.serverName, authRef, resolveCredential)
+  const connection = startConnection(ctx, config, reconnect, resolveCredentials, requestAuth)
+  if (credentialRefs.size > 0) {
+    ctx.on('credentials/reference-updated', (ref) => {
+      if (credentialRefs.has(ref)) connection.recycle(`credential "${ref}" changed`)
+    })
+  }
   registerServerContext(ctx, config.serverName, connection)
   let stopping: Promise<void> | undefined
   const dispose = (): Promise<void> => stopping ??= connection.dispose()
